@@ -286,10 +286,14 @@ vi.mock("./useMcpStatus", () => ({
   }),
   mcpFooterLabel: () => "",
 }));
+const telemetryScenario = vi.hoisted(() => ({ ask: false }));
 vi.mock("./telemetry-consent", () => ({
-  shouldAskTelemetryConsent: () => false,
-  TELEMETRY_CONSENT_CHOICES: [],
+  shouldAskTelemetryConsent: () => telemetryScenario.ask,
+  TELEMETRY_CONSENT_CHOICES: [{ key: "opt-out", label: "Don't share" }],
   telemetryConsentWrite: () => "later",
+}));
+vi.mock("./views/ProviderSetupDialog", () => ({
+  ProviderSetupDialog: ({ mode }: { mode: string }) => <div data-testid={`provider-setup:${mode}`} />,
 }));
 vi.mock("./WindowChrome", () => ({
   ResizeHandles: () => null,
@@ -582,6 +586,7 @@ vi.mock("./views/ReviewHandoffPage", () => ({
 }));
 
 beforeEach(() => {
+  window.localStorage.setItem("alinery.onboardingCompleted.v1", "1");
   actualCreation.enabled = false;
   namingScenario.realSessions = false;
   namingScenario.realTaskDetail = false;
@@ -616,6 +621,72 @@ it("opens Playbooks from the top tab after selecting a repository, without an in
   fireEvent.click(screen.getByTitle(task.repo_path));
   fireEvent.click(await screen.findByRole("button", { name: "Playbooks" }));
   await screen.findByRole("table", { name: "Playbook library" });
+});
+
+describe("onboarding gate", () => {
+  it("offers a configured install the guide once at Playbooks, then lands on the grid after Skip", async () => {
+    window.localStorage.removeItem("alinery.onboardingCompleted.v1");
+    render(<App />);
+    await screen.findByTestId("onboarding-step-playbooks");
+    // With a repository the guide is a modal over the board, not a replacement for it.
+    expect(screen.getByRole("dialog", { name: "Alinery onboarding" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Skip setup" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Alinery onboarding" })).toBeNull());
+    await screen.findByTestId("grid:view:default-kanban-plus");
+    expect(window.localStorage.getItem("alinery.onboardingCompleted.v1")).toBe("1");
+
+    cleanup();
+    render(<App />);
+    await screen.findByTestId("grid:view:default-kanban-plus");
+    expect(screen.queryByTestId("onboarding-flow")).toBeNull();
+  });
+
+  it("resumes an interrupted first run at the saved step once a repository exists", async () => {
+    window.localStorage.removeItem("alinery.onboardingCompleted.v1");
+    window.localStorage.setItem("alinery.onboardingStep.v1", "models");
+    render(<App />);
+    await screen.findByTestId("onboarding-step-models");
+  });
+
+  it("opens the wizard on first run and keeps it open through the first repository pick", async () => {
+    window.localStorage.removeItem("alinery.onboardingCompleted.v1");
+    ipcMocks.readAppConfig.mockResolvedValue({ ...appConfig, active_repo: "" });
+    render(<App />);
+    await screen.findByTestId("onboarding-step-workspace");
+    expect(window.localStorage.getItem("alinery.onboardingCompleted.v1")).toBeNull();
+
+    fireEvent.click(screen.getByTitle(task.repo_path));
+    await screen.findByTestId("onboarding-step-playbooks");
+    expect(screen.getByRole("dialog", { name: "Alinery onboarding" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Skip setup" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Alinery onboarding" })).toBeNull());
+    await screen.findByTestId("grid:view:default-kanban-plus");
+    expect(window.localStorage.getItem("alinery.onboardingCompleted.v1")).toBe("1");
+  });
+
+  it("asks about usage sharing only after onboarding finishes, and offers provider setup only after the answer", async () => {
+    telemetryScenario.ask = true;
+    try {
+      window.localStorage.removeItem("alinery.onboardingCompleted.v1");
+      render(<App />);
+      await screen.findByTestId("onboarding-step-playbooks");
+      expect(screen.queryByRole("alertdialog", { name: "Share anonymous usage?" })).toBeNull();
+      expect(screen.queryByTestId("provider-setup:auto")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Skip setup" }));
+      await screen.findByTestId("grid:view:default-kanban-plus");
+      expect(screen.queryByRole("alertdialog", { name: "Share anonymous usage?" })).toBeNull();
+      const dialog = await screen.findByRole("alertdialog", { name: "Share anonymous usage?" }, { timeout: 3000 });
+      expect(screen.queryByTestId("provider-setup:auto")).toBeNull();
+
+      fireEvent.click(within(dialog).getByRole("button", { name: "Don't share" }));
+      await screen.findByTestId("provider-setup:auto");
+    } finally {
+      telemetryScenario.ask = false;
+    }
+  });
 });
 
 async function renderApp() {
