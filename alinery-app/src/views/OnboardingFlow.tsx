@@ -416,12 +416,12 @@ export function OnboardingFlow({
                     <li key={chainStep.key} data-gate={chainStep.auto_advance_default ? undefined : "true"}>
                       <span className="onboarding-chain-dot" aria-hidden="true" />
                       <span className="onboarding-chain-title">{chainStep.title}</span>
-                      {!chainStep.auto_advance_default && <span className="onboarding-chain-gate">waits for you</span>}
+                      {!chainStep.auto_advance_default && <span className="onboarding-chain-gate">Waits for you</span>}
                       <code className="onboarding-chain-artifact">{chainStep.outputs[0]?.path}</code>
                     </li>
                   ))}
                 </ol>
-                <p className="onboarding-chain-note">Each step writes a markdown file the next one reads. Steps marked “waits for you” pause until you approve.</p>
+                <p className="onboarding-chain-note">Each step writes a markdown file the next one reads. Steps marked “Waits for you” pause until you approve.</p>
                 <button type="button" className="btn ghost small" onClick={() => goToStep("playbooks")}>
                   Preview how playbooks work →
                 </button>
@@ -811,11 +811,6 @@ export function OnboardingFlow({
               <button type="button" className="btn ghost" onClick={() => goToStep(ONBOARDING_STEPS[stepIndex - 1].id)}>
                 Back
               </button>
-            )}
-            {hasActiveRepo && (
-              <span className="keyhint">
-                <b>Esc</b>Skip to workspace
-              </span>
             )}
           </div>
           <div className="onboarding-footer-right">
