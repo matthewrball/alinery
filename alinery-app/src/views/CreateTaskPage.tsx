@@ -1257,7 +1257,6 @@ export function CreateTaskPage({
               harness="omp"
               repoPath={repoPath}
               ariaLabel="Task Default Model"
-              showPickerButton={false}
               value={model}
               onChange={(v) => {
                 dirtyRef.current = true;
@@ -1297,8 +1296,7 @@ export function CreateTaskPage({
                         harness="omp"
                         repoPath={repoPath}
                         prefillRemembered={false}
-                        showPickerButton={false}
-                        placeholder=""
+                        placeholder="Inherits"
                         ariaLabel={`${step.title} model`}
                         value={display.value}
                         onChange={(value) => onStepModelChange(step.key, value)}

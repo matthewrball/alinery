@@ -186,7 +186,7 @@ export default function App() {
   // starting at Playbooks. Finish, Skip and Esc mark completion; replay never clears it.
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStepId | undefined>(undefined);
-  const [manualProviderSetupOpen, setManualProviderSetupOpen] = useState(false);
+  const [manualProviderSetup, setManualProviderSetup] = useState<{ tab: "models" | "accounts"; onPick?: (model: string) => void } | null>(null);
   // The usage-sharing question never sits on top of the wizard; when it is still owed it is
   // asked shortly after onboarding finishes, and the auto provider offer waits for its answer
   // so the two dialogs never stack.
@@ -1330,15 +1330,16 @@ export default function App() {
   const chrome = (content: ReactNode, header?: ReactNode) => (
     <ChatSessionProvider>
       <>
-        {manualProviderSetupOpen && (
+        {manualProviderSetup && (
           <ProviderSetupDialog
             mode="manual"
-            onClose={() => {
-              setManualProviderSetupOpen(false);
-            }}
+            initialTab={manualProviderSetup.tab}
+            unsignedOpensAccounts={manualProviderSetup.tab === "models"}
+            onPick={manualProviderSetup.onPick}
+            onClose={() => setManualProviderSetup(null)}
           />
         )}
-        {!manualProviderSetupOpen && setupOffer && !onboardingOpen && (
+        {!manualProviderSetup && setupOffer && !onboardingOpen && (
           <ProviderSetupDialog
             mode="auto"
             onClose={(reason) => {
@@ -1468,7 +1469,7 @@ export default function App() {
           onSelectRepo={setRepo}
           onAddRepo={addRepo}
           onRemoveRepo={removeRepo}
-          onOpenProviderSetup={() => setManualProviderSetupOpen(true)}
+          onOpenProviderSetup={(tab, onPick) => setManualProviderSetup({ tab, onPick })}
           onCompleteToWorkspace={completeOnboarding}
           onOpenCreateWithPlaybook={(playbook, preset) => {
             completeOnboarding();
@@ -1518,7 +1519,7 @@ export default function App() {
         onSelectRepo={setRepo}
         onAddRepo={addRepo}
         onRemoveRepo={removeRepo}
-        onOpenProviderSetup={() => setManualProviderSetupOpen(true)}
+        onOpenProviderSetup={(tab, onPick) => setManualProviderSetup({ tab, onPick })}
         onCompleteToWorkspace={completeOnboarding}
         onOpenCreateWithPlaybook={(playbook, preset) => {
           completeOnboarding();

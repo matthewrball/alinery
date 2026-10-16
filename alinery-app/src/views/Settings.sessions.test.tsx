@@ -85,6 +85,18 @@ vi.mock("../ipc", () =>
 );
 
 vi.mock("../confirm", () => ({ confirmDanger: mocks.confirmDanger }));
+vi.mock("./ProviderSetupDialog", () => ({
+  ProviderSetupDialog: ({ onPick, onClose }: { onPick?: (model: string) => void; onClose: () => void }) => (
+    <div role="dialog" aria-label="Models">
+      <button type="button" onClick={() => onPick?.("gpt-5")}>
+        pick gpt-5
+      </button>
+      <button type="button" onClick={onClose}>
+        close picker
+      </button>
+    </div>
+  ),
+}));
 
 import { Settings } from "./Settings";
 
@@ -155,15 +167,25 @@ describe("Harness settings model default", () => {
     await waitFor(() => expect((screen.getByLabelText("Model") as HTMLInputElement).value).toBe(""));
   });
 
-  it("stamps defaults.harness as omp when committing a model", async () => {
+  it("stamps defaults.harness as omp when a model is picked", async () => {
     renderHarnessSection();
-    const input = (await screen.findByLabelText("Model")) as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "gpt-5" } });
-    fireEvent.blur(input);
+    fireEvent.click(await screen.findByRole("combobox", { name: "Model" }));
+    fireEvent.click(await screen.findByRole("button", { name: "pick gpt-5" }));
     await waitFor(() => expect(mocks.writeGlobalSettings).toHaveBeenCalled());
     const saved = mocks.writeGlobalSettings.mock.calls[mocks.writeGlobalSettings.mock.calls.length - 1][0] as GlobalSettings;
     expect(saved.defaults.harness).toBe("omp");
     expect(saved.defaults.model).toBe("gpt-5");
+    expect((screen.getByRole("combobox", { name: "Model" }) as HTMLInputElement).value).toBe("gpt-5");
+  });
+
+  it("does not write an override merely by opening the picker", async () => {
+    renderHarnessSection();
+    const trigger = await screen.findByRole("combobox", { name: "Model" });
+    fireEvent.click(trigger);
+    fireEvent.blur(trigger);
+    fireEvent.click(await screen.findByRole("button", { name: "close picker" }));
+    expect(mocks.writeGlobalSettings).not.toHaveBeenCalled();
+    expect(mocks.writeRepoOverridesForRepo).not.toHaveBeenCalled();
   });
 });
 

@@ -33,7 +33,7 @@ export function OnboardingFlow({
   onSelectRepo: (path: string) => Promise<boolean>;
   onAddRepo: () => Promise<boolean>;
   onRemoveRepo: (path: string) => void;
-  onOpenProviderSetup: () => void;
+  onOpenProviderSetup: (tab: "models" | "accounts", onPick?: (model: string) => void) => void;
   onCompleteToWorkspace: () => void;
   onOpenCreateWithPlaybook: (playbook: PlaybookRef, preset?: StarterTaskPreset) => void;
   onLaunchStarterTask: (playbook: PlaybookRef, preset: StarterTaskPreset) => Promise<void>;
@@ -645,13 +645,9 @@ export function OnboardingFlow({
                   <div className="onboarding-readiness-row">
                     <div className="onboarding-readiness-title">
                       <Layers size={16} aria-hidden="true" />
-                      <strong>Model provider & accounts</strong>
+                      <strong>Default model</strong>
                     </div>
-                    <span className="pill">{defaultModel ? "Configured" : "Harness default"}</span>
                   </div>
-                  <p className="onboarding-readiness-detail">
-                    Choose a default model for <strong>{repoName(appConfig.active_repo)}</strong> or sign in to Anthropic, OpenAI, Gemini, or Alinery Hosted models.
-                  </p>
                   <div className="onboarding-model-control">
                     <ModelInput
                       harness="omp"
@@ -659,11 +655,19 @@ export function OnboardingFlow({
                       value={defaultModel}
                       onChange={setDefaultModel}
                       onCommit={handleCommitDefaultModel}
-                      onOpenPicker={onOpenProviderSetup}
+                      onOpenPicker={() =>
+                        onOpenProviderSetup("models", (model) => {
+                          setDefaultModel(model);
+                          handleCommitDefaultModel(model);
+                        })
+                      }
                       ariaLabel="Default repository model"
                     />
-                    <button type="button" className="btn ghost" onClick={onOpenProviderSetup}>
-                      Configure providers & accounts…
+                  </div>
+                  <div className="onboarding-readiness-foot">
+                    <p className="onboarding-readiness-detail">Used by every playbook step in {repoName(appConfig.active_repo)} unless a step overrides it.</p>
+                    <button type="button" className="btn ghost small" onClick={() => onOpenProviderSetup("accounts")}>
+                      Manage accounts…
                     </button>
                   </div>
                 </div>

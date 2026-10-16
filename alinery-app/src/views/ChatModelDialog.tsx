@@ -161,6 +161,13 @@ export function ChatModelDialog({
     return [...matched.filter((m) => starred.has(`${m.provider}/${m.id}`)), ...matched.filter((m) => !starred.has(`${m.provider}/${m.id}`))];
   }, [listed, query, favorites]);
   const selected = filtered.find((m) => `${m.provider}/${m.id}` === query.trim()) ?? filtered[0];
+  // A `provider/id` nobody lists is still a valid ask (preview models, private deployments).
+  const customRef = (() => {
+    const q = query.trim();
+    const slash = q.indexOf("/");
+    if (slash <= 0 || slash === q.length - 1 || listed.some((m) => `${m.provider}/${m.id}` === q)) return null;
+    return { provider: q.slice(0, slash), id: q.slice(slash + 1) };
+  })();
   const title = setup ? "Set up your providers" : tab === "accounts" ? "Providers" : "Models";
 
   const applyOrUpsell = (provider: string, modelId: string) => {
@@ -245,13 +252,25 @@ export function ChatModelDialog({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && selected) applyOrUpsell(selected.provider, selected.id);
+                if (e.key !== "Enter") return;
+                if (selected) applyOrUpsell(selected.provider, selected.id);
+                else if (customRef) onApplyModel(customRef.provider, customRef.id);
               }}
             />
             {error ? <p className="chat-face-danger">{error}</p> : null}
             <ul className="chat-model-list">
               {catalogueStatus === "connecting" ? <li className="dim">Connecting…</li> : null}
-              {catalogueStatus === "ready" && filtered.length === 0 ? <li className="dim">No models match.</li> : null}
+              {catalogueStatus === "ready" && filtered.length === 0 && !customRef ? <li className="dim">No models match.</li> : null}
+              {customRef ? (
+                <li className="chat-model-row">
+                  <button type="button" className="chat-model-item" onClick={() => onApplyModel(customRef.provider, customRef.id)}>
+                    <span>
+                      Use {customRef.provider}/{customRef.id}
+                    </span>
+                    <span className="chat-work-meta">custom id</span>
+                  </button>
+                </li>
+              ) : null}
 
               {filtered.map((m) => {
                 const label = `${m.provider}/${m.id}`;
