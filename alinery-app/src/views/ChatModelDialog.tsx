@@ -142,7 +142,6 @@ export function ChatModelDialog({
 }: ChatProvidersDialogProps) {
   const [query, setQuery] = useState(preselect ?? "");
   const [advancedOpen, setAdvancedOpen] = useState(defaultAdvancedOpen);
-  const [rolePick, setRolePick] = useState<string | null>(null);
 
   useEffect(() => {
     setQuery(preselect ?? "");
@@ -160,6 +159,7 @@ export function ChatModelDialog({
     if (starred.size === 0) return matched;
     return [...matched.filter((m) => starred.has(`${m.provider}/${m.id}`)), ...matched.filter((m) => !starred.has(`${m.provider}/${m.id}`))];
   }, [listed, query, favorites]);
+  const roleModels = useMemo(() => listed.filter((model) => model.provider !== HOSTED_PROVIDER || hosted?.ready), [listed, hosted?.ready]);
   const selected = filtered.find((m) => `${m.provider}/${m.id}` === query.trim()) ?? filtered[0];
   // A `provider/id` nobody lists is still a valid ask (preview models, private deployments).
   const customRef = (() => {
@@ -188,7 +188,7 @@ export function ChatModelDialog({
         </button>
       </div>
       <div className="mb">
-        <div className="chat-hatch chat-providers-tabs" role="tablist" aria-label="Providers dialog">
+        <div className="chat-hatch chat-providers-tabs" data-tab={tab} role="tablist" aria-label="Providers dialog">
           <button type="button" role="tab" aria-selected={tab === "accounts"} className={tab === "accounts" ? "active" : ""} onClick={() => onTabChange("accounts")}>
             Accounts
           </button>
@@ -196,11 +196,24 @@ export function ChatModelDialog({
             Models
           </button>
         </div>
+        {error && (
+          <div className="chat-provider-error">
+            <p role="alert">
+              {error.includes("project ownership unavailable")
+                ? "This repository is in use by another Alinery instance. Close it there or resolve access from the repository warning, then reopen this picker."
+                : "The provider request failed. Review the diagnostic below, then retry the action."}
+            </p>
+            <details>
+              <summary>Technical details</summary>
+              <pre>{error}</pre>
+            </details>
+          </div>
+        )}
 
+        <div key={tab} className="chat-provider-panel">
         {tab === "accounts" ? (
           <>
             <p className="dim">Sign in with browser OAuth or paste-code. Chat never collects API keys.</p>
-            {error ? <p className="chat-face-danger">{error}</p> : null}
             {children}
             <ul className="chat-model-list">
               {hosted ? <AlineryAccountRow hosted={hosted} onSignIn={onSignIn} onSubscribe={onSubscribe} onBuyCredits={onBuyCredits} /> : null}
@@ -219,10 +232,8 @@ export function ChatModelDialog({
               })}
             </ul>
             {advanced.length > 0 ? (
-              <div className="chat-providers-advanced">
-                <button type="button" className="btn ghost small" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((o) => !o)}>
-                  {advancedOpen ? "Hide Advanced" : "Advanced"}
-                </button>
+              <details className="chat-model-roles" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
+                <summary>Advanced</summary>
                 {advancedOpen ? (
                   <>
                     <p className="dim">These need Terminal /login or an environment variable on the Alinery process. Chat will not collect keys.</p>
@@ -238,7 +249,7 @@ export function ChatModelDialog({
                     </ul>
                   </>
                 ) : null}
-              </div>
+              </details>
             ) : null}
           </>
         ) : (
@@ -257,7 +268,6 @@ export function ChatModelDialog({
                 else if (customRef) onApplyModel(customRef.provider, customRef.id);
               }}
             />
-            {error ? <p className="chat-face-danger">{error}</p> : null}
             <ul className="chat-model-list">
               {catalogueStatus === "connecting" ? <li className="dim">Connecting…</li> : null}
               {catalogueStatus === "ready" && filtered.length === 0 && !customRef ? <li className="dim">No models match.</li> : null}
@@ -304,65 +314,37 @@ export function ChatModelDialog({
               })}
             </ul>
 
-            <div className="chat-model-roles">
-              <p className="dim">Role assignments apply to new OMP processes (titles, @smol, advisor, …). This chat’s model is the session control above.</p>
-              <table className="chat-role-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Role</th>
-                    <th scope="col">Model</th>
-                    <th scope="col" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {BUILTIN_MODEL_ROLES.map((role) => {
-                    const assigned = modelRoles[role];
-                    const picking = rolePick === role;
-                    return (
-                      <tr key={role}>
-                        <td>
-                          <code>{role}</code>
-                        </td>
-                        <td>{assigned || <span className="dim">unset</span>}</td>
-                        <td>
-                          {picking ? (
-                            <select
-                              aria-label={`Assign ${role}`}
-                              className="field-input"
-                              defaultValue=""
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setRolePick(null);
-                                if (v === "") onAssignRole(role, null);
-                                else onAssignRole(role, v);
-                              }}
-                            >
-                              <option value="">Clear</option>
-                              {listed
-                                .filter((m) => m.provider !== HOSTED_PROVIDER || hosted?.ready)
-                                .map((m) => {
-                                  const label = `${m.provider}/${m.id}`;
-                                  return (
-                                    <option key={label} value={label}>
-                                      {label}
-                                    </option>
-                                  );
-                                })}
-                            </select>
-                          ) : (
-                            <button type="button" className="btn ghost small" onClick={() => setRolePick(role)}>
-                              {assigned ? "Change" : "Assign"}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <details className="chat-model-roles">
+              <summary>Role defaults</summary>
+              <p className="dim">Choose models for new OMP processes. These assignments do not change the current session.</p>
+              <div className="chat-role-list">
+                {BUILTIN_MODEL_ROLES.map((role) => {
+                  const assigned = modelRoles[role] || "";
+                  const unavailable = assigned && !roleModels.some((model) => `${model.provider}/${model.id}` === assigned);
+                  return (
+                    <label className="chat-role-row" key={role}>
+                      <code>{role}</code>
+                      <select
+                        aria-label={`Model for ${role}`}
+                        className="field-input"
+                        value={assigned}
+                        onChange={(event) => onAssignRole(role, event.target.value || null)}
+                      >
+                        <option value="">Not assigned</option>
+                        {unavailable && <option value={assigned} disabled>{assigned} (unavailable)</option>}
+                        {roleModels.map((model) => {
+                          const value = `${model.provider}/${model.id}`;
+                          return <option key={value} value={value}>{value}</option>;
+                        })}
+                      </select>
+                    </label>
+                  );
+                })}
+              </div>
+            </details>
           </>
         )}
+        </div>
       </div>
       <div className="mfoot">
         {tab === "models" ? (

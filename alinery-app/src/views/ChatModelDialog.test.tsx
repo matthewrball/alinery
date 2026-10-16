@@ -25,15 +25,6 @@ describe("ChatModelDialog", () => {
 
   afterEach(cleanup);
 
-  it("renders models tab with current and role table", () => {
-    const empty = renderToStaticMarkup(<ChatModelDialog {...base} models={[]} />);
-    expect(empty).toContain("No models match");
-    const html = renderToStaticMarkup(<ChatModelDialog {...base} />);
-    expect(html).toContain("xai/grok-4.6");
-    expect(html).toContain("current");
-    expect(html).toContain("smol");
-    expect(html).toContain("Role assignments apply");
-  });
 
   it("renders Accounts with Advanced collapsed for env-only providers", () => {
     const html = renderToStaticMarkup(
@@ -92,9 +83,9 @@ describe("ChatModelDialog", () => {
   });
 
   it("does not list a starred model the query does not match", () => {
-    const html = renderToStaticMarkup(<ChatModelDialog {...base} favorites={["xai/grok-4.6"]} onToggleFavorite={vi.fn()} preselect="nope-nope" />);
-    expect(html).toContain("No models match");
-    expect(html).not.toContain(">xai/grok-4.6<");
+    render(<ChatModelDialog {...base} favorites={["xai/grok-4.6"]} onToggleFavorite={vi.fn()} preselect="nope-nope" />);
+    expect(screen.queryByRole("button", { name: /xai\/grok-4.6/ })).toBeNull();
+    expect((screen.getByRole("button", { name: "Apply" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("still lists a starred model the query matches", () => {
@@ -190,16 +181,40 @@ describe("ChatModelDialog", () => {
       source: "live",
     };
     render(<ChatModelDialog {...base} hosted={hosted} />);
-    fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[0]);
-    const values = [...screen.getByLabelText(/Assign/).querySelectorAll("option")].map((option) => (option as HTMLOptionElement).value);
+    fireEvent.click(screen.getByText("Role defaults"));
+    const values = [...screen.getByLabelText("Model for default").querySelectorAll("option")].map((option) => (option as HTMLOptionElement).value);
     expect(values).toContain("xai/grok-4.6");
     expect(values.some((value) => value.startsWith("alinery/"))).toBe(false);
 
     cleanup();
     render(<ChatModelDialog {...base} hosted={{ ...hosted, ready: true, upsell: null, source: "live" }} />);
-    fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[0]);
-    const readyValues = [...screen.getByLabelText(/Assign/).querySelectorAll("option")].map((option) => (option as HTMLOptionElement).value);
+    fireEvent.click(screen.getByText("Role defaults"));
+    const readyValues = [...screen.getByLabelText("Model for default").querySelectorAll("option")].map((option) => (option as HTMLOptionElement).value);
     expect(readyValues).toContain("alinery/Qwen3.6-35B-A3B");
+  });
+
+  it("preserves unavailable role assignments and permits replacing or clearing them", () => {
+    const onAssignRole = vi.fn();
+    render(<ChatModelDialog {...base} modelRoles={{ default: "old/private" }} onAssignRole={onAssignRole} />);
+    fireEvent.click(screen.getByText("Role defaults"));
+    const select = screen.getByLabelText("Model for default") as HTMLSelectElement;
+    expect(select.value).toBe("old/private");
+    fireEvent.change(select, { target: { value: "xai/grok-4.6" } });
+    expect(onAssignRole).toHaveBeenLastCalledWith("default", "xai/grok-4.6");
+    fireEvent.change(select, { target: { value: "" } });
+    expect(onAssignRole).toHaveBeenLastCalledWith("default", null);
+  });
+
+  it("keeps diagnostics collapsed without blocking model selection", () => {
+    const error = `project ownership unavailable: ${"project owner is still running (/repo/.alinery/owner.lock); ".repeat(30)}`;
+    const onApplyModel = vi.fn();
+    render(<ChatModelDialog {...base} error={error} onApplyModel={onApplyModel} />);
+    const details = screen.getByText("Technical details").closest("details");
+    expect(details?.open).toBe(false);
+    expect(details?.textContent).toContain(error);
+    expect(screen.getByRole("alert").textContent).not.toContain(".lock");
+    fireEvent.click(screen.getByRole("button", { name: /xai\/grok-4.6/ }));
+    expect(onApplyModel).toHaveBeenCalledWith("xai", "grok-4.6");
   });
 });
 

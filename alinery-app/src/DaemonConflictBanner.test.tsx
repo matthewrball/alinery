@@ -40,7 +40,7 @@ const owner: DaemonOwnerConflict = {
 const conflict: DaemonConflict = { repo: "/repo", app_protocol: 15, app_config_identity: "current", owners: [owner], issues: [] };
 const preview: TakeoverPreview = { confirmation_id: "consent-a", repo: "/repo", owner };
 function mount(value = conflict, refresh = vi.fn()) {
-  return {
+  const view = {
     ...render(
       <>
         <DaemonConflictBanner conflict={value} onRefresh={refresh} />
@@ -49,6 +49,8 @@ function mount(value = conflict, refresh = vi.fn()) {
     ),
     refresh,
   };
+  fireEvent.click(screen.getByRole("button", { name: /Repository access blocked/ }));
+  return view;
 }
 async function open() {
   fireEvent.click(screen.getAllByRole("button", { name: "Take over repo" })[0]);
@@ -62,6 +64,17 @@ function cancel(dialog: HTMLElement) {
 }
 
 describe("selected-owner takeover", () => {
+  it("keeps ownership details behind the compact warning until opened", () => {
+    render(<DaemonConflictBanner conflict={conflict} onRefresh={vi.fn()} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText(/Build: old-build/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Repository access blocked/ }));
+    expect(screen.getByRole("dialog", { name: "Repository access" }).textContent).toContain("old-build");
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(ipc.prepareRepoTakeover).not.toHaveBeenCalled();
+  });
+
   it.each([
     { status: "known", sessions: [] } as const,
     { status: "unknown", detail: "Session inspection timed out" } as const,
@@ -113,7 +126,7 @@ describe("selected-owner takeover", () => {
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     expect(screen.queryByText(/PID 42/)).toBeNull();
     expect(screen.getByText(/PID 43/)).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toMatch(/stopped/i);
+    expect(within(screen.getByRole("dialog", { name: "Repository access" })).getByRole("status").textContent).toMatch(/stopped/i);
     expect(ipc.prepareRepoTakeover).toHaveBeenCalledTimes(1);
     expect(ipc.prepareRepoTakeover).toHaveBeenCalledWith("/repo", "old-dev");
     expect(ipc.confirmRepoTakeover).toHaveBeenCalledExactlyOnceWith("consent-a");

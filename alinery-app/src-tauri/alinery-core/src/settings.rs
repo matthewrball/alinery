@@ -70,6 +70,7 @@ fn normalize_loaded_grid_views(views: Vec<GridViewDefinition>) -> Vec<GridViewDe
     for view in sort_grid_views_by_slot(views) {
         let id = view.id.trim();
         let name = view.name.trim();
+        let name = if id == crate::types::DEFAULT_GRID_VIEW_ID && name == "Kanban+" { "Canvas" } else { name };
         let name_key = name.to_lowercase();
         if id.is_empty() || name.is_empty() || !ids.insert(id.to_string()) || !names.insert(name_key) {
             continue;

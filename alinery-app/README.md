@@ -4,12 +4,32 @@ Desktop UI for the Alinery task-centric AI coding playbook (kanban, persistent P
 
 ## Using the app (quick start)
 
-1. **Pick a repo** on first launch (or via the repo switcher). Alinery stores everything under `<repo>/.alinery/`.
+1. **Pick a repo** on first launch (or via the repo switcher). The centered setup screen stays on repository selection after connecting: add another repository or choose **Continue** to learn about playbooks. Alinery stores everything under `<repo>/.alinery/`.
 2. **Create a task** (`⌘N` or the “+” button) — gives it a slug, optional description, and an automatic git worktree on its own branch.
 3. **Open the task** → Kanban shows its current playbok phase. Click any phase to spawn a session.
 4. **Session view** runs the chosen harness (claude / codex / …) in a real PTY via xterm.js. The session keeps running in `alineryd` even if you quit the app; reopening re-attaches.
 5. **Artifacts** are written after each phase. Use the artifact list or MCP tools to read them.
 6. **Settings** (gear) manages browser-based GitHub/Linear connections plus repository config, harnesses, and notifications.
+
+Repository ownership conflicts appear as a compact caution strip at the top of the window. Click the warning to inspect owner/session details and takeover actions; taking over still requires separate confirmation.
+
+The default grid view is named **Canvas** (formerly Kanban+). Existing default labels are updated while saved view IDs, layouts, and custom names are preserved. The separate classic **Kanban** view is unchanged.
+
+Provider setup uses compact, equal-width **Accounts** and **Models** tabs with a sliding selected indicator and keyboard-focus ring. The modal keeps the same viewport-capped height between tabs, with responsive, taller list rows filling the available body height and fixed bottom-right footer actions. **Advanced** accounts and **Role defaults** use matching expandable rows. Content enters with a short fade; reduced-motion settings disable both animations.
+
+Canvas uses low-contrast 32px gridlines with slightly stronger guides every 160px. Grid colors follow the active theme without reducing card or text contrast.
+
+Settings → **Harness** follows the same model-first layout as onboarding. The default model and provider accounts remain prominent; session preferences, model inheritance, installation paths, customizations, and session-service controls expand on demand. Global/repository inheritance and update/stop confirmations are unchanged.
+
+The playbook introduction reveals its explanation, numbered step cards, and graph in sequence. Hover or keyboard-focus a card for checkpoint details. After a two-second **Simulate run** cue, a local demo advances through each step and pauses for approval at human checkpoints; pause, resume, and reset remain available. This demonstration creates no tasks or agent sessions. Reduced-motion mode shows the explorer immediately and advances only when requested. **Skip Onboarding** opens the workspace.
+
+If the onboarding session-service check fails, its full diagnostic is available under **Technical details** in a bounded scroll area. Resolve the reported issue and use **Retry check**; the error does not replace the model selector.
+
+Model setup uses a single-column form with the default model first and agent connection status below; model precedence is explained on demand. The first-task form displays the target repository name and full path above playbook selection. Use **Change** to return to repository selection before launching.
+
+The model picker keeps session selection separate from **Role defaults**, an expandable advanced section. Each role has a direct model dropdown; choosing **Not assigned** clears its override. Assignments affect new OMP processes, not the current session. Previously assigned models missing from the catalog stay visible as unavailable. Provider failures show a short summary with the full diagnostic in bounded **Technical details**; the picker footer remains visible while the body scrolls.
+
+The playbook explorer reserves both columns throughout its introduction: the compact numbered-step rail settles first, then the preview fades in over 480ms. Amber step markers indicate human checkpoints. Hover or focus reveals checkpoint details without resizing cards. The two-column layout remains available at the 900px minimum window width.
 
 ### Blocking sub-tasks
 

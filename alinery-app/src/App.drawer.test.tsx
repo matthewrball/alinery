@@ -142,7 +142,7 @@ async function renderApp(config: AppConfig = appConfig) {
   const { default: App } = await import("./App");
   render(<App />);
   if (config.active_repo) await screen.findByRole("button", { name: "Repository" });
-  else await screen.findByRole("heading", { name: "Select a repository to get started" });
+  else await screen.findByRole("heading", { name: "Select a repository" });
 }
 
 // A cleared drawer is unmounted, so its last recorded props are stale; the shortcut only

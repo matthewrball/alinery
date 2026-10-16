@@ -165,6 +165,21 @@ export function PlaybookGraph({
     return () => observer.disconnect();
   }, [canvasEnabled, layout, showInspector, fit, paintView, viewRef]);
 
+  useLayoutEffect(() => {
+    if (!selectedStepKey || !simulatedStatuses?.[selectedStepKey]) return;
+    const viewport = viewportRef.current;
+    const node = canvasRef.current?.querySelector<HTMLElement>('.playbook-definition-node[aria-pressed="true"]');
+    if (!viewport || !node) return;
+    const frame = viewport.getBoundingClientRect();
+    const bounds = node.getBoundingClientRect();
+    const dx = bounds.left < frame.left + 24 ? frame.left + 24 - bounds.left : bounds.right > frame.right - 24 ? frame.right - 24 - bounds.right : 0;
+    const dy = bounds.top < frame.top + 24 ? frame.top + 24 - bounds.top : bounds.bottom > frame.bottom - 24 ? frame.bottom - 24 - bounds.bottom : 0;
+    if (dx || dy) {
+      const view = viewRef.current;
+      setView({ ...view, tx: view.tx + dx, ty: view.ty + dy });
+    }
+  }, [selectedStepKey, simulatedStatuses, setView, viewRef]);
+
   if (variant === "definition" && layout) {
     const selectedEdges = showInspector ? edges.filter(({ from, to }) => from.key === selectedStep?.key || to.key === selectedStep?.key) : [];
     const stepsByKey = Object.fromEntries(steps.map((step) => [step.key, step]));

@@ -703,7 +703,7 @@ pub struct GridViewDefinition {
 pub fn default_grid_views() -> Vec<GridViewDefinition> {
     vec![GridViewDefinition {
         id: DEFAULT_GRID_VIEW_ID.into(),
-        name: "Kanban+".into(),
+        name: "Canvas".into(),
         slot: 1,
     }]
 }

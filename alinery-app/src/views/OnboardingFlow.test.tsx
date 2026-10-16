@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_APPEARANCE } from "../appearance";
 import * as ipc from "../ipc";
@@ -87,6 +87,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.localStorage.clear();
@@ -112,7 +113,7 @@ describe("onboarding persistence helpers", () => {
 });
 
 describe("OnboardingFlow wizard", () => {
-  it("renders Step 01 when no active repository is connected and advances to Step 02 after repository selection", async () => {
+  it("keeps repository selection on Step 01 until the user continues", async () => {
     const onSelectRepo = vi.fn(async () => true);
     const onAddRepo = vi.fn(async () => true);
 
@@ -131,16 +132,16 @@ describe("OnboardingFlow wizard", () => {
     );
 
     expect(screen.getByTestId("onboarding-step-workspace")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Select a repository to get started" })).toBeTruthy();
-    expect((screen.getByRole("button", { name: /Continue/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: /Continue/i })).toBeNull();
 
-    // Selecting an existing repository advances to Step 02 (Playbooks)
     fireEvent.click(screen.getByTitle("/Users/dev/project"));
     await waitFor(() => expect(onSelectRepo).toHaveBeenCalledWith("/Users/dev/project"));
-    expect(await screen.findByTestId("onboarding-step-playbooks")).toBeTruthy();
+    expect(screen.getByTestId("onboarding-step-workspace")).toBeTruthy();
+    expect(readSavedOnboardingStep(true)).toBe("workspace");
   });
 
   it("explores playbooks and simulates auto-advance waves and human checkpoints in Step 02", async () => {
+    vi.useFakeTimers();
     render(
       <OnboardingFlow
         appConfig={baseConfig}
@@ -159,15 +160,48 @@ describe("OnboardingFlow wizard", () => {
     expect(screen.getByTestId("onboarding-step-playbooks")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "How playbooks work" })).toBeTruthy();
 
-    // SuperDevelop is selected by default; click Simulate run -> advances through Clarify & Investigate and pauses at Decide checkpoint
-    fireEvent.click(screen.getByRole("button", { name: /Simulate run/i }));
-    expect(await screen.findByText(/Paused at human checkpoint/i)).toBeTruthy();
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700);
+    });
+    expect(screen.getByRole("radiogroup")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Simulate run/i })).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(900);
+    });
+    expect(screen.getByRole("button", { name: /Simulate run/i })).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1999);
+    });
+    expect(screen.queryByRole("button", { name: "Pause demo" })).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(screen.getByText("Wave 1 of 7")).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1400);
+    });
+    expect(screen.getByText("Wave 2 of 7")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pause demo" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+    expect(screen.getByText("Wave 2 of 7")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Resume demo" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1400);
+    });
+    expect(screen.getByText(/Paused at human checkpoint/i)).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+    expect(screen.getByText(/Paused at human checkpoint/i)).toBeTruthy();
     const approveBtn = screen.getByRole("button", { name: /Approve decide\.md & continue to Plan/i });
     expect(approveBtn).toBeTruthy();
 
     // Approving the Decide checkpoint advances simulation to Plan
     fireEvent.click(approveBtn);
-    expect(await screen.findByRole("button", { name: /Advance step to Define Tests/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Advance step to Define Tests/i })).toBeTruthy();
 
     // Switch to Academic Survey to inspect `each` fan-out and `complete` barrier bindings
     fireEvent.click(screen.getByRole("radio", { name: /Academic Survey/i }));
@@ -180,6 +214,41 @@ describe("OnboardingFlow wizard", () => {
 
     fireEvent.click(within(graphRegion).getByRole("button", { name: /Deduplicate and Dispatch Sources/i }));
     expect(screen.getByText("complete — waits for all upstream outputs")).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(screen.getByRole("button", { name: "Simulate run" })).toBeTruthy();
+  });
+
+  it("shows the explorer immediately without autoplay when reduced motion is requested", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    render(
+      <OnboardingFlow
+        appConfig={baseConfig}
+        repoError=""
+        initialStep="playbooks"
+        onSelectRepo={vi.fn(async () => true)}
+        onAddRepo={vi.fn(async () => true)}
+        onRemoveRepo={vi.fn()}
+        onOpenProviderSetup={vi.fn()}
+        onCompleteToWorkspace={vi.fn()}
+        onOpenCreateWithPlaybook={vi.fn()}
+        onLaunchStarterTask={vi.fn(async () => {})}
+      />,
+    );
+    expect(screen.getByRole("radiogroup")).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Simulate run" }));
+    expect(screen.getByText("Wave 1 of 7")).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(screen.getByText("Wave 1 of 7")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Advance step to Investigate/ }));
+    expect(screen.getByText("Wave 2 of 7")).toBeTruthy();
   });
 
   it("launches a 1-click starter task or opens the full Create Task form in Step 04", async () => {

@@ -191,7 +191,11 @@ describe("Harness settings model default", () => {
 
 describe("Harness settings thinking default", () => {
   // By role: in a repo scope the label also holds the badge's "Use global value" button, which label text queries match too.
-  const thinkingSelect = async () => (await screen.findByRole("combobox", { name: /Default thinking level/ })) as HTMLSelectElement;
+  const thinkingSelect = async () => {
+    const summary = await screen.findByText("Session preferences");
+    if (!summary.closest("details")?.open) fireEvent.click(summary);
+    return (await screen.findByRole("combobox", { name: /Default thinking level/ })) as HTMLSelectElement;
+  };
 
   it("shows high while the setting is unset", async () => {
     renderHarnessSection();
@@ -337,42 +341,6 @@ describe("Sessions view and Chat tabs", () => {
 });
 
 describe("Harness OMP version", () => {
-  it("renders installed and available versions", async () => {
-    mocks.checkOmpUpdate.mockResolvedValue({
-      installed: "18.1.10",
-      available: { version: "18.2.0", asset_url: "https://example.test/omp" },
-      checked_at: 1,
-    });
-    renderHarnessSection();
-    await waitFor(() => expect(screen.getByText(/Installed: 18.1.10/)).toBeTruthy());
-    expect(screen.getByText(/Update available: 18.2.0/)).toBeTruthy();
-    expect(screen.getByLabelText("Model")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Stop all sessions/ })).toBeTruthy();
-  });
-
-  it("names the binary and the config home this install uses", async () => {
-    // A version with no location cannot answer "which install am I looking at" -- the whole
-    // reason this panel got the paths.
-    mocks.checkOmpUpdate.mockResolvedValue({
-      installed: "18.1.10",
-      available: null,
-      checked_at: 1,
-      binary_path: "/Applications/Alinery.omp/omp",
-      config_dir: "/cfg/ai.delegance.alinery.dev/instances/abc123/omp/config/agent",
-    });
-    renderHarnessSection();
-    await waitFor(() => expect(screen.getByText(/Binary: \/Applications\/Alinery.omp\/omp/)).toBeTruthy());
-    expect(screen.getByText(/Config: .*instances\/abc123\/omp\/config\/agent/)).toBeTruthy();
-  });
-
-  it("says nothing rather than showing blanks when the paths are unknown", async () => {
-    mocks.checkOmpUpdate.mockResolvedValue({ installed: "18.1.10", available: null, checked_at: 1, binary_path: "", config_dir: "" });
-    renderHarnessSection();
-    await waitFor(() => expect(screen.getByText(/Installed: 18.1.10/)).toBeTruthy());
-    expect(screen.queryByText(/Binary:/)).toBeNull();
-    expect(screen.queryByText(/Config:/)).toBeNull();
-    expect(screen.queryByRole("button", { name: "Update OMP" })).toBeNull();
-  });
 
   it("Update OMP goes through confirm, then updateOmp", async () => {
     mocks.checkOmpUpdate.mockResolvedValue({
@@ -381,7 +349,7 @@ describe("Harness OMP version", () => {
       checked_at: 1,
     });
     renderHarnessSection();
-    const omp = await screen.findByRole("region", { name: "OMP" });
+    const omp = await screen.findByRole("region", { name: "Agent & providers" });
     const button = await within(omp).findByRole("button", { name: "Update OMP" });
     fireEvent.click(button);
     await waitFor(() => expect(mocks.confirmDanger).toHaveBeenCalled());

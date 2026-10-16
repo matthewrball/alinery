@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Cpu, FolderOpen, FolderPlus, GitBranch, Layers, Play, RotateCcw, Sparkles, X } from "lucide-react";
+import { ArrowRight, Check, Cpu, FolderOpen, FolderPlus, Layers, Play, RotateCcw, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 import { ORB_SPEED } from "../Indicators";
@@ -44,6 +44,29 @@ export function OnboardingFlow({
   const [liveDefinitions, setLiveDefinitions] = useState<Record<string, NormalizedPlaybook>>({});
   const [selectedStepKey, setSelectedStepKey] = useState<string | null>(CURATED_PLAYBOOK_ARCHETYPES[0].fallbackDefinition.step[0]?.key ?? null);
   const [simStepIndex, setSimStepIndex] = useState<number | null>(null);
+  const [intro, setIntro] = useState<"explain" | "cards" | "cue" | "ready">("explain");
+  const [playing, setPlaying] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
+
+  useEffect(() => {
+    const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!media) return;
+    const update = () => setReducedMotion(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    setPlaying(false);
+    if (step !== "playbooks") return;
+    setIntro(reducedMotion ? "ready" : "explain");
+  }, [step, reducedMotion]);
+
+  useEffect(() => {
+    if (step !== "playbooks" || reducedMotion || (intro !== "explain" && intro !== "cards")) return;
+    const timer = window.setTimeout(() => setIntro(intro === "explain" ? "cards" : "cue"), intro === "explain" ? 700 : 900);
+    return () => window.clearTimeout(timer);
+  }, [step, reducedMotion, intro]);
 
   // Step 03: Agent & model readiness state
   const [agentStatus, setAgentStatus] = useState<"checking" | "ready" | "attention">("checking");
@@ -170,15 +193,19 @@ export function OnboardingFlow({
     writeSavedOnboardingStep(next);
   };
 
-  const handleSelectRepoAndAdvance = async (path: string) => {
-    if (await onSelectRepo(path)) goToStep("playbooks");
+  const handleSelectRepo = async (path: string) => {
+    writeSavedOnboardingStep("workspace");
+    await onSelectRepo(path);
   };
 
-  const handleAddRepoAndAdvance = async () => {
-    if (await onAddRepo()) goToStep("playbooks");
+  const handleAddRepo = async () => {
+    writeSavedOnboardingStep("workspace");
+    await onAddRepo();
   };
 
   const handleSelectArchetype = (key: string) => {
+    setIntro("ready");
+    setPlaying(false);
     setSelectedArchetypeKey(key);
     const nextArchetype = CURATED_PLAYBOOK_ARCHETYPES.find((item) => item.reference.key === key) ?? CURATED_PLAYBOOK_ARCHETYPES[0];
     const nextDef = liveDefinitions[key] ?? nextArchetype.fallbackDefinition;
@@ -204,25 +231,45 @@ export function OnboardingFlow({
   const currentSimStep = simStepIndex !== null && simStepIndex < activePlaybook.step.length ? activePlaybook.step[simStepIndex] : null;
   const nextSimStep = simStepIndex !== null && simStepIndex + 1 < activePlaybook.step.length ? activePlaybook.step[simStepIndex + 1] : null;
 
-  const handleAdvanceSimulation = () => {
-    const steps = activePlaybook.step;
-    if (steps.length === 0) return;
-    if (simStepIndex === null || simStepIndex >= steps.length) {
-      // Start simulation and advance through initial auto-advance steps up to the first human checkpoint (or step 0 if step 0 is a checkpoint or all steps auto-advance)
-      const firstGateIndex = steps.findIndex((s) => !s.auto_advance_default);
-      const targetIndex = firstGateIndex > 0 ? firstGateIndex : 0;
-      setSimStepIndex(targetIndex);
-      setSelectedStepKey(steps[targetIndex].key);
+  // A finite invitation, followed by a local demonstration only: no task/session IPC.
+  useEffect(() => {
+    if (step !== "playbooks" || intro !== "cue") return;
+    const timer = window.setTimeout(() => {
+      setIntro("ready");
+      setSimStepIndex(0);
+      setSelectedStepKey(activePlaybook.step[0]?.key ?? null);
+      setPlaying(true);
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [step, intro, activePlaybook.step]);
+
+  useEffect(() => {
+    if (step !== "playbooks" || !playing || simStepIndex === null) return;
+    if (!currentSimStep || !currentSimStep.auto_advance_default) {
+      setPlaying(false);
       return;
     }
-    const nextIndex = simStepIndex + 1;
+    const timer = window.setTimeout(() => {
+      const next = simStepIndex + 1;
+      setSimStepIndex(next);
+      if (activePlaybook.step[next]) setSelectedStepKey(activePlaybook.step[next].key);
+    }, 1400);
+    return () => window.clearTimeout(timer);
+  }, [step, playing, simStepIndex, currentSimStep, activePlaybook.step]);
+
+  const handleAdvanceSimulation = () => {
+    setIntro("ready");
+    const steps = activePlaybook.step;
+    if (steps.length === 0) return;
+    const nextIndex = simStepIndex === null || simStepIndex >= steps.length ? 0 : simStepIndex + 1;
     setSimStepIndex(nextIndex);
-    if (nextIndex < steps.length) {
-      setSelectedStepKey(steps[nextIndex].key);
-    }
+    setPlaying(!reducedMotion);
+    if (nextIndex < steps.length) setSelectedStepKey(steps[nextIndex].key);
   };
 
   const handleResetSimulation = () => {
+    setIntro("ready");
+    setPlaying(false);
     setSimStepIndex(null);
     setSelectedStepKey(activePlaybook.step[0]?.key ?? null);
   };
@@ -340,7 +387,7 @@ export function OnboardingFlow({
           <div className="onboarding-header-actions">
             {hasActiveRepo ? (
               <button type="button" className="btn ghost small" onClick={onCompleteToWorkspace}>
-                Skip setup
+                Skip Onboarding
               </button>
             ) : (
               <span className="onboarding-header-caption">Pick a repository to continue</span>
@@ -349,95 +396,81 @@ export function OnboardingFlow({
         </header>
 
         {step === "workspace" && (
-          <div className="onboarding-body" data-dir={direction} data-testid="onboarding-step-workspace">
-            <div className="onboarding-pane-copy">
-              <h2>Select a repository to get started</h2>
+          <div className="onboarding-body onboarding-body-focus" data-dir={direction} data-testid="onboarding-step-workspace">
+            <div className="onboarding-focus">
+              <h2>{hasActiveRepo ? "Repository connected" : "Select a repository"}</h2>
               <p className="onboarding-lede">
-                Tasks, artifacts, and playbook state are stored in <code>.alinery/</code> inside the repository.
+                {hasActiveRepo
+                  ? "Add another repository now or continue to see how playbooks run your tasks."
+                  : "Alinery keeps tasks, artifacts, and playbook state in .alinery/ inside the repository you choose."}
               </p>
 
               {appConfig.known_repos.length > 0 && (
-                <div className="onboarding-repos">
-                  <p className="onboarding-repos-label">Your repositories</p>
-                  <ul className="onboarding-repo-list">
-                    {appConfig.known_repos.map((repo) => {
-                      const isCurrent = repo === appConfig.active_repo;
-                      return (
-                        <li key={repo} className="onboarding-repo-row">
-                          <button
-                            type="button"
-                            className={`onboarding-repo${isCurrent ? " active" : ""}`}
-                            title={repo}
-                            onClick={() => void handleSelectRepoAndAdvance(repo)}
-                          >
-                            <strong>{repoName(repo)}</strong>
-                            {isCurrent && <span className="onboarding-repo-connected">Connected</span>}
-                            <span className="onboarding-repo-path">{repo}</span>
-                            <ArrowRight size={16} strokeWidth={1.6} aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            className="onboarding-repo-remove"
-                            title={`Remove ${repoName(repo)} from Alinery (repo files are untouched)`}
-                            aria-label={`Remove ${repoName(repo)}`}
-                            onClick={() => onRemoveRepo(repo)}
-                          >
-                            <X size={16} strokeWidth={1.5} aria-hidden="true" />
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
+                <ul className="onboarding-repo-list" aria-label="Your repositories">
+                  {appConfig.known_repos.map((repo) => {
+                    const isCurrent = repo === appConfig.active_repo;
+                    return (
+                      <li key={repo} className="onboarding-repo-row">
+                        <button type="button" className={`onboarding-repo${isCurrent ? " active" : ""}`} title={repo} onClick={() => void handleSelectRepo(repo)}>
+                          <strong>{repoName(repo)}</strong>
+                          {isCurrent && <span className="onboarding-repo-connected">Connected</span>}
+                          <span className="onboarding-repo-path">{repo}</span>
+                          {!isCurrent && <ArrowRight size={16} strokeWidth={1.6} aria-hidden="true" />}
+                        </button>
+                        <button
+                          type="button"
+                          className="onboarding-repo-remove"
+                          title={`Remove ${repoName(repo)} from Alinery (repo files are untouched)`}
+                          aria-label={`Remove ${repoName(repo)}`}
+                          onClick={() => onRemoveRepo(repo)}
+                        >
+                          <X size={16} strokeWidth={1.5} aria-hidden="true" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
-
-              <div className="onboarding-workspace-actions">
-                <button type="button" className="btn onboarding-add-repo" data-autofocus onClick={() => void handleAddRepoAndAdvance()}>
-                  <FolderPlus size={16} strokeWidth={1.6} aria-hidden="true" />
-                  {hasActiveRepo ? "Switch or add repository…" : "Add a repository"}
-                </button>
-              </div>
 
               {repoError && (
                 <InlineStatus tone="error" detail={repoError}>
                   Couldn't open the repository. Choose another folder or initialize Git when prompted.
                 </InlineStatus>
               )}
-            </div>
 
-            <div className="onboarding-pane-stage">
-              <figure className="onboarding-chain-preview" aria-label={`${CURATED_PLAYBOOK_ARCHETYPES[0].fallbackDefinition.title} step chain`}>
-                <figcaption>
-                  <span>{CURATED_PLAYBOOK_ARCHETYPES[0].fallbackDefinition.title}</span>
-                  <span className="onboarding-chain-meta">{CURATED_PLAYBOOK_ARCHETYPES[0].fallbackDefinition.step.length} steps · bundled playbook</span>
-                </figcaption>
-                <ol className="onboarding-chain">
-                  {CURATED_PLAYBOOK_ARCHETYPES[0].fallbackDefinition.step.map((chainStep) => (
-                    <li key={chainStep.key} data-gate={chainStep.auto_advance_default ? undefined : "true"}>
-                      <span className="onboarding-chain-dot" aria-hidden="true" />
-                      <span className="onboarding-chain-title">{chainStep.title}</span>
-                      {!chainStep.auto_advance_default && <span className="onboarding-chain-gate">Waits for you</span>}
-                      <code className="onboarding-chain-artifact">{chainStep.outputs[0]?.path}</code>
-                    </li>
-                  ))}
-                </ol>
-                <p className="onboarding-chain-note">Each step writes a markdown file the next one reads. Steps marked “Waits for you” pause until you approve.</p>
-                <button type="button" className="btn ghost small" onClick={() => goToStep("playbooks")}>
-                  Preview how playbooks work →
-                </button>
-              </figure>
+              <div className="onboarding-focus-actions">
+                {hasActiveRepo ? (
+                  <>
+                    <button type="button" className="btn ghost onboarding-add-repo" onClick={() => void handleAddRepo()}>
+                      <FolderPlus size={16} strokeWidth={1.6} aria-hidden="true" />
+                      Add another repository
+                    </button>
+                    <button type="button" className="btn onboarding-add-repo" data-autofocus onClick={() => goToStep("playbooks")}>
+                      Continue
+                      <ArrowRight size={15} aria-hidden="true" />
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="btn onboarding-add-repo" data-autofocus onClick={() => void handleAddRepo()}>
+                    <FolderPlus size={16} strokeWidth={1.6} aria-hidden="true" />
+                    Add a repository
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
 
         {step === "playbooks" && (
-          <div className="onboarding-body onboarding-body-playbooks" data-dir={direction} data-testid="onboarding-step-playbooks">
+          <div className="onboarding-body onboarding-body-playbooks" data-intro={intro} data-dir={direction} data-testid="onboarding-step-playbooks">
             <div className="onboarding-playbook-rail">
               <h2>How playbooks work</h2>
               <p className="onboarding-lede">A playbook is a fixed sequence of steps. Each step reads and writes named markdown files, and some steps wait for you.</p>
 
               <div
                 className="onboarding-archetype-list"
+                aria-hidden={intro === "explain"}
+                inert={intro === "explain"}
                 role="radiogroup"
                 aria-label="Explore starter playbooks"
                 onKeyDown={(event) => {
@@ -463,14 +496,20 @@ export function OnboardingFlow({
                     >
                       <div className="onboarding-archetype-top">
                         <strong>{def.title}</strong>
-                        <span className="pill">{archetype.badge}</span>
+                        <span className="onboarding-step-count">{def.step.length} steps</span>
                       </div>
-                      <p className="onboarding-archetype-tagline">{archetype.tagline}</p>
-                      <div className="onboarding-archetype-meta">
-                        <span>{def.step.length} steps</span>
-                        <span>·</span>
+                      <span className="onboarding-mini-chain" aria-label={def.step.map((item, i) => `${i + 1}. ${item.title}`).join(", ")}>
+                        {def.step.map((item, stepNumber) => (
+                          <span className="onboarding-mini-step" key={item.key} title={`${stepNumber + 1}. ${item.title}${item.auto_advance_default ? "" : " — waits for you"}`}>
+                            <span className="onboarding-mini-number" data-checkpoint={!item.auto_advance_default || undefined}>
+                              {stepNumber + 1}
+                            </span>
+                          </span>
+                        ))}
+                      </span>
+                      <span className="onboarding-card-detail">
                         <span>{archetype.checkpointNote}</span>
-                      </div>
+                      </span>
                     </button>
                   );
                 })}
@@ -494,7 +533,7 @@ export function OnboardingFlow({
               </div>
             </div>
 
-            <div className="onboarding-playbook-stage">
+            <div className="onboarding-playbook-stage" aria-hidden={intro === "explain" || intro === "cards"} inert={intro === "explain" || intro === "cards"}>
               <div className="onboarding-sim-bar">
                 <div className="onboarding-sim-status">
                   <span
@@ -517,10 +556,21 @@ export function OnboardingFlow({
                   <span className="onboarding-sim-copy">{simStatusCopy}</span>
                 </div>
                 <div className="onboarding-sim-actions">
-                  <button type="button" className="btn small" onClick={handleAdvanceSimulation}>
+                  <button type="button" className={`btn small${intro === "cue" ? " onboarding-sim-cue" : ""}`} onClick={handleAdvanceSimulation}>
                     <Play size={13} aria-hidden="true" />
                     {simPrimaryLabel}
                   </button>
+                  {playing && currentSimStep?.auto_advance_default && (
+                    <button type="button" className="btn ghost small" onClick={() => setPlaying(false)}>
+                      Pause demo
+                    </button>
+                  )}
+                  {!playing && simStepIndex !== null && currentSimStep?.auto_advance_default && (
+                    <button type="button" className="btn ghost small" onClick={() => setPlaying(true)}>
+                      Resume demo
+                    </button>
+                  )}
+                  {intro === "cue" && <span className="onboarding-demo-label">Demo starts in 2 seconds</span>}
                   {simStepIndex !== null && (
                     <button type="button" className="btn ghost small" onClick={handleResetSimulation}>
                       <RotateCcw size={13} aria-hidden="true" />
@@ -605,42 +655,12 @@ export function OnboardingFlow({
         )}
 
         {step === "models" && (
-          <div className="onboarding-body" data-dir={direction} data-testid="onboarding-step-models">
-            <div className="onboarding-pane-copy">
-              <h2>Agent and model</h2>
-              <p className="onboarding-lede">Agent sessions run through OMP. Set a default model once; any playbook or step can override it.</p>
+          <div className="onboarding-body onboarding-body-models" data-dir={direction} data-testid="onboarding-step-models">
+            <div className="onboarding-model-setup">
+              <h2>Choose your default model</h2>
+              <p className="onboarding-lede">Pick the model your agents will use in {repoName(appConfig.active_repo)}. You can change it later.</p>
 
               <div className="onboarding-readiness-stack">
-                <div className="onboarding-readiness-card">
-                  <div className="onboarding-readiness-row">
-                    <div className="onboarding-readiness-title">
-                      <Cpu size={16} aria-hidden="true" />
-                      <strong>Session service & OMP agent</strong>
-                    </div>
-                    {agentStatus === "checking" && (
-                      <span className="pill">
-                        <ThinkingOrb state="searching" size={20} speed={ORB_SPEED} />
-                        Checking…
-                      </span>
-                    )}
-                    {agentStatus === "ready" && (
-                      <span className="pill onboarding-pill-success">
-                        <Check size={12} aria-hidden="true" />
-                        Ready
-                      </span>
-                    )}
-                    {agentStatus === "attention" && <span className="pill onboarding-pill-warning">Needs attention</span>}
-                  </div>
-                  <p className="onboarding-readiness-detail">{agentDetail}</p>
-                  {agentStatus === "attention" && (
-                    <div className="onboarding-readiness-actions">
-                      <button type="button" className="btn ghost small" onClick={() => setProbeTick((n) => n + 1)}>
-                        Retry check
-                      </button>
-                    </div>
-                  )}
-                </div>
-
                 <div className="onboarding-readiness-card">
                   <div className="onboarding-readiness-row">
                     <div className="onboarding-readiness-title">
@@ -671,31 +691,50 @@ export function OnboardingFlow({
                     </button>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <div className="onboarding-pane-stage">
-              <div className="onboarding-concept-card">
-                <h3>Where a step's model comes from</h3>
-                <p className="onboarding-concept-body">
-                  Any playbook or step can override the repository default — a fast model for parallel reading steps, a stronger one for <code>Decide</code>.
-                </p>
-                <div className="onboarding-inheritance-chain">
-                  <div className="onboarding-inheritance-row">
-                    <span>1. Step override (Create Task or playbook TOML)</span>
-                    <code>step.model</code>
+                <div className="onboarding-readiness-card">
+                  <div className="onboarding-readiness-row">
+                    <div className="onboarding-readiness-title">
+                      <Cpu size={16} aria-hidden="true" />
+                      <strong>Agent connection</strong>
+                    </div>
+                    {agentStatus === "checking" && (
+                      <span className="pill">
+                        <ThinkingOrb state="searching" size={20} speed={ORB_SPEED} />
+                        Checking…
+                      </span>
+                    )}
+                    {agentStatus === "ready" && (
+                      <span className="pill onboarding-pill-success">
+                        <Check size={12} aria-hidden="true" />
+                        Ready
+                      </span>
+                    )}
+                    {agentStatus === "attention" && <span className="pill onboarding-pill-warning">Needs attention</span>}
                   </div>
-                  <div className="onboarding-inheritance-row">
-                    <span>2. Playbook default</span>
-                    <code>default_model</code>
-                  </div>
-                  <div className="onboarding-inheritance-row">
-                    <span>3. Repository default</span>
-                    <code>{defaultModel || "Harness default"}</code>
-                  </div>
+                  <p className="onboarding-readiness-detail">
+                    {agentStatus === "attention" ? "Could not connect to the session service. Review the details below, resolve the issue, then retry." : agentDetail}
+                  </p>
+                  {agentStatus === "attention" && (
+                    <details className="onboarding-prompt-preview">
+                      <summary>Technical details</summary>
+                      <pre>{agentDetail}</pre>
+                    </details>
+                  )}
+                  {agentStatus === "attention" && (
+                    <div className="onboarding-readiness-actions">
+                      <button type="button" className="btn ghost small" onClick={() => setProbeTick((n) => n + 1)}>
+                        Retry check
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
+
+            <details className="onboarding-model-help">
+              <summary>Can different steps use different models?</summary>
+              <p>Yes. A step’s model takes priority, followed by the playbook’s default, then this repository’s default. Leave the selection empty to use the harness default.</p>
+            </details>
           </div>
         )}
 
@@ -704,9 +743,18 @@ export function OnboardingFlow({
             <div className="onboarding-launch-header">
               <div>
                 <h2>Start your first task</h2>
-                <p className="onboarding-lede">
-                  Choose a playbook for <strong>{repoName(appConfig.active_repo)}</strong>. The task runs in its own worktree and stops at the first checkpoint for your review.
-                </p>
+                <p className="onboarding-lede">Start from a suggested task, or edit it to fit your project.</p>
+                <div className="onboarding-target-repo">
+                  <FolderOpen size={20} aria-hidden="true" />
+                  <div>
+                    <span className="onboarding-target-label">Repository</span>
+                    <strong>{repoName(appConfig.active_repo)}</strong>
+                    <code>{appConfig.active_repo}</code>
+                  </div>
+                  <button type="button" className="btn ghost small" onClick={() => goToStep("workspace")}>
+                    Change
+                  </button>
+                </div>
               </div>
               <div className="onboarding-launch-archetypes" role="radiogroup" aria-label="Starting playbook">
                 {CURATED_PLAYBOOK_ARCHETYPES.map((archetype) => {
@@ -729,16 +777,11 @@ export function OnboardingFlow({
             </div>
 
             <div className="onboarding-launch-grid">
-              <div className="onboarding-launch-card primary">
+              <div className="onboarding-launch-card">
                 <div className="onboarding-launch-card-top">
-                  <span className="pill onboarding-pill-accent">
-                    <Sparkles size={12} aria-hidden="true" />
-                    1-click starter preset
-                  </span>
-                  <span className="pill">{selectedArchetype.badge}</span>
+                  <h3>{activePlaybook.title}</h3>
+                  <span className="onboarding-readiness-detail">{activePlaybook.step.length} steps</span>
                 </div>
-                <h3>{activePlaybook.title}</h3>
-                <p className="onboarding-launch-summary">{selectedArchetype.patternSummary}</p>
                 <p className="onboarding-launch-checkpoint">{selectedArchetype.checkpointNote}</p>
 
                 <div className="onboarding-preset-fields">
@@ -747,7 +790,7 @@ export function OnboardingFlow({
                     <input type="text" value={starterName} onChange={(event) => setStarterName(event.target.value)} aria-label="Starter task title" className="field-input" />
                   </label>
                   <label className="onboarding-field">
-                    <span>Task prompt (`ticket.md`)</span>
+                    <span>What should the agents do?</span>
                     <textarea
                       rows={3}
                       value={starterDescription}
@@ -772,68 +815,43 @@ export function OnboardingFlow({
                 </div>
               </div>
 
-              <div className="onboarding-launch-card">
-                <div className="onboarding-launch-card-top">
-                  <span className="pill">Custom workflow</span>
-                </div>
-                <h3>Start from your own ticket or explore the board</h3>
-                <p className="onboarding-launch-summary">
-                  Open the full Create Task page to import a Linear issue or GitHub ticket, customize step models and auto-advance gates, or head straight to the Kanban+ workspace.
-                </p>
-
-                <div className="onboarding-custom-preview">
-                  <div className="onboarding-custom-row">
-                    <GitBranch size={15} aria-hidden="true" />
-                    <span>
-                      Selected playbook: <strong>{activePlaybook.title}</strong> ({activePlaybook.step.length} steps)
-                    </span>
-                  </div>
-                  <div className="onboarding-custom-row">
-                    <FolderOpen size={15} aria-hidden="true" />
-                    <span>
-                      Repository: <strong>{repoName(appConfig.active_repo)}</strong>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="onboarding-launch-actions vertical">
-                  <button type="button" className="btn ghost" onClick={() => onOpenCreateWithPlaybook(selectedArchetype.reference)}>
-                    Open full Create Task form with {selectedArchetype.fallbackDefinition.title}
-                  </button>
-                  <button type="button" className="btn ghost" onClick={onCompleteToWorkspace}>
-                    Go to Kanban+ workspace
-                  </button>
-                </div>
+              <div className="onboarding-launch-alternatives">
+                <span>Prefer to start another way?</span>
+                <button type="button" className="btn ghost small" onClick={() => onOpenCreateWithPlaybook(selectedArchetype.reference)}>
+                  Open full Create Task form with {selectedArchetype.fallbackDefinition.title}
+                </button>
+                <button type="button" className="btn ghost small" onClick={onCompleteToWorkspace}>
+                  Go to Canvas workspace
+                </button>
               </div>
             </div>
           </div>
         )}
 
-        <footer className="onboarding-footer">
-          <div className="onboarding-footer-left">
-            {stepIndex > 0 && (
+        {step !== "workspace" && (
+          <footer className="onboarding-footer">
+            <div className="onboarding-footer-left">
               <button type="button" className="btn ghost" onClick={() => goToStep(ONBOARDING_STEPS[stepIndex - 1].id)}>
                 Back
               </button>
-            )}
-          </div>
-          <div className="onboarding-footer-right">
-            {step !== "launch" && (
-              <button
-                type="button"
-                className="btn"
-                disabled={!hasActiveRepo}
-                onClick={() => {
-                  const next = ONBOARDING_STEPS[stepIndex + 1];
-                  if (next) goToStep(next.id);
-                }}
-              >
-                Continue
-                <ArrowRight size={15} aria-hidden="true" />
-              </button>
-            )}
-          </div>
-        </footer>
+            </div>
+            <div className="onboarding-footer-right">
+              {step !== "launch" && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    const next = ONBOARDING_STEPS[stepIndex + 1];
+                    if (next) goToStep(next.id);
+                  }}
+                >
+                  Continue
+                  <ArrowRight size={15} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          </footer>
+        )}
       </div>
     </div>
   );

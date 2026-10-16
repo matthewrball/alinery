@@ -34,8 +34,7 @@ export function readSavedOnboardingStep(hasActiveRepo: boolean): OnboardingStepI
   try {
     const raw = localStorage.getItem(ONBOARDING_STEP_KEY);
     if (raw && ONBOARDING_STEPS.some((step) => step.id === raw)) {
-      const saved = raw as OnboardingStepId;
-      return saved === "workspace" ? "playbooks" : saved;
+      return raw as OnboardingStepId;
     }
   } catch {
     // Fall through to default.

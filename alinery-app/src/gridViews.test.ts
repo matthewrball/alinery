@@ -11,9 +11,20 @@ import {
 } from "./gridViews";
 
 describe("Grid view definitions", () => {
-  it("seeds exactly one Kanban+ view for missing or invalid settings", () => {
-    expect(normalizeGridViews(undefined)).toEqual([{ id: DEFAULT_GRID_VIEW_ID, name: "Kanban+", slot: 1 }]);
-    expect(normalizeGridViews([{ id: "", name: "  ", slot: 0 }])).toEqual([{ id: DEFAULT_GRID_VIEW_ID, name: "Kanban+", slot: 1 }]);
+  it("seeds one view for missing or invalid settings", () => {
+    expect(normalizeGridViews(undefined)).toEqual([{ id: DEFAULT_GRID_VIEW_ID, name: "Canvas", slot: 1 }]);
+    expect(normalizeGridViews([{ id: "", name: "  ", slot: 0 }])).toEqual([{ id: DEFAULT_GRID_VIEW_ID, name: "Canvas", slot: 1 }]);
+  });
+
+  it("migrates the original default label without changing IDs, slots, or custom names", () => {
+    expect(normalizeGridViews([
+      { id: DEFAULT_GRID_VIEW_ID, name: "Kanban+", slot: 1 },
+      { id: "custom", name: "Roadmap", slot: 2 },
+    ])).toEqual([
+      { id: DEFAULT_GRID_VIEW_ID, name: "Canvas", slot: 1 },
+      { id: "custom", name: "Roadmap", slot: 2 },
+    ]);
+    expect(normalizeGridViews([{ id: DEFAULT_GRID_VIEW_ID, name: "My board", slot: 1 }])[0].name).toBe("My board");
   });
 
   it("sorts explicit slots, trims labels, removes duplicates, and caps at three", () => {

@@ -829,7 +829,7 @@ export default function App() {
     const wasActive = path === appConfig?.active_repo;
     const live = await liveSessions(path);
     const ok = await confirmDanger(
-      `Close ${repoName(path)}?`,
+      `Remove ${repoName(path)}?`,
       <>
         <p>Its session daemon is stopped and the repo is removed from the list. Files on disk are untouched.</p>
         {live > 0 && (
@@ -838,7 +838,7 @@ export default function App() {
           </p>
         )}
       </>,
-      "Close repo",
+      "Remove repository",
     );
     if (!ok) return;
     try {

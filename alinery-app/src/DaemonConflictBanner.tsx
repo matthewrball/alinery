@@ -2,7 +2,7 @@ import { TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { confirmDanger } from "./confirm";
 import * as ipc from "./ipc";
-import { repoName } from "./shared";
+import { Dialog, repoName } from "./shared";
 import type { DaemonConflict, DaemonOwnerConflict } from "./types";
 
 const HOST_GUARD_WARNING =
@@ -51,6 +51,7 @@ export function DaemonConflictBanner({ conflict, onRefresh }: { conflict: Daemon
 
 function SelectedRepoConflict({ conflict, onRefresh }: { conflict: DaemonConflict; onRefresh: () => void }) {
   const [pending, setPending] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState("");
   const [remaining, setRemaining] = useState<{ source: DaemonConflict; value: DaemonConflict | null } | null>(null);
@@ -144,34 +145,49 @@ function SelectedRepoConflict({ conflict, onRefresh }: { conflict: DaemonConflic
   };
 
   return (
-    <div className="daemon-conflict" role="alert">
-      <TriangleAlert size={16} strokeWidth={2} aria-hidden="true" className="daemon-conflict-icon" />
-      <div>
-        {displayed && <strong>{name} cannot be opened here yet.</strong>}
-        {displayed?.owners.map((owner) => (
-          <section key={owner.lane}>
-            <OwnerEvidence owner={owner} />
-            {owner.takeover_unavailable ? (
-              <>
-                <p>{owner.takeover_unavailable}</p>
-                <p>Stop this owner from its owning app, or resolve the reported access problem. Do not delete lock or ownership files to force access.</p>
-              </>
-            ) : (
-              <button type="button" className="btn small danger" disabled={pending} onClick={(event) => void takeOver(owner, event.currentTarget)}>
-                Take over {name}
-              </button>
-            )}
-          </section>
-        ))}
-        {[...new Set(displayed?.issues)].map((issue) => (
-          <p key={issue}>{issue}</p>
-        ))}
-        {!!displayed?.issues.length && <p>Resolve the reported ownership evidence before switching. Do not delete lock or ownership files to force access.</p>}
-        {pending && <p role="status">Takeover awaiting confirmation or completion…</p>}
-        {progress && <p role="status">{progress}</p>}
-        {error && <p role="alert">{error}</p>}
+    <>
+      <div className="daemon-conflict-strip" role="status">
+        <button type="button" onClick={() => setDetailsOpen(true)} aria-haspopup="dialog">
+          <TriangleAlert size={14} strokeWidth={1.6} aria-hidden="true" />
+          <span>{displayed ? `${name} · Repository access blocked` : "Repository takeover completed"}</span>
+        </button>
       </div>
-    </div>
+      {detailsOpen && (
+        <Dialog onClose={() => setDetailsOpen(false)} ariaLabel="Repository access" className="daemon-conflict-dialog">
+          <div className="mh">
+            <span className="mt">Repository access</span>
+            <button type="button" className="btn ghost small" onClick={() => setDetailsOpen(false)}>
+              Close
+            </button>
+          </div>
+          <div className="mb">
+            {displayed && <strong>{name} cannot be opened here yet.</strong>}
+            {displayed?.owners.map((owner) => (
+              <section key={owner.lane}>
+                <OwnerEvidence owner={owner} />
+                {owner.takeover_unavailable ? (
+                  <>
+                    <p>{owner.takeover_unavailable}</p>
+                    <p>Stop this owner from its owning app, or resolve the reported access problem. Do not delete lock or ownership files to force access.</p>
+                  </>
+                ) : (
+                  <button type="button" className="btn small danger" disabled={pending} onClick={(event) => void takeOver(owner, event.currentTarget)}>
+                    Take over {name}
+                  </button>
+                )}
+              </section>
+            ))}
+            {[...new Set(displayed?.issues)].map((issue) => (
+              <p key={issue}>{issue}</p>
+            ))}
+            {!!displayed?.issues.length && <p>Resolve the reported ownership evidence before switching. Do not delete lock or ownership files to force access.</p>}
+            {pending && <p role="status">Takeover awaiting confirmation or completion…</p>}
+            {progress && <p role="status">{progress}</p>}
+            {error && <p role="alert">{error}</p>}
+          </div>
+        </Dialog>
+      )}
+    </>
   );
 }
 
