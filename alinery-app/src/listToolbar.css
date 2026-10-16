@@ -1,6 +1,8 @@
-.collection-view {
+.listwrap.collection-view {
   min-width: 0;
   min-height: 0;
+  /* The list clips its own scrolling content; the toolbar's focus rings must stay visible. */
+  overflow: visible;
 }
 
 .collection-view > .list {
@@ -129,6 +131,10 @@
   font: inherit;
   font-size: calc(13px * var(--ui-scale));
   text-overflow: ellipsis;
+}
+
+.collection-filters select:focus-visible {
+  outline-offset: 2px;
 }
 
 .collection-results {
