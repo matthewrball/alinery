@@ -268,6 +268,7 @@ Rules:
 - Related content groups: `12-16px`.
 - Major screen regions: `24-32px` when space permits.
 - Default control height: `32px`; prominent controls may use `36px`.
+- Page-level toolbar controls share the `--control-h` height across Canvas, Tasks, Sessions, Kanban, and Playbooks, including compact toolbar buttons, library tabs, and search fields. Keep compact row actions independent from toolbar sizing.
 - Table and list rows should generally remain between `32px` and `40px`, increasing only for meaningful secondary content.
 - Use alignment, whitespace, and separators before adding another container.
 - Preserve resizable panes and let primary work surfaces consume available space.
@@ -409,6 +410,7 @@ AI components are not chat bubbles by default. Choose the structure that best ex
 - Use native HTML semantics before ARIA.
 - Visible focus is required on every interactive element and must remain clear in light and dark modes.
 - Default focus treatment is a `2px` accent ring with enough offset to remain distinct from the component border.
+- Collection wrappers must not clip toolbar focus rings; the list itself retains scroll clipping. Dropdown rings use the same `2px` offset as toolbar buttons, preserving native dropdown and keyboard behavior.
 - Focus order follows visual reading order.
 - Status always includes text; color, icon, and motion are supplemental.
 - Icon-only buttons require accessible names and visible tooltips.

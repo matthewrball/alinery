@@ -3119,6 +3119,10 @@ textarea.field-input {
   padding: 0 10px;
   font-size: calc(12px * var(--ui-scale));
 }
+/* Page-level toolbar controls share a height; compact buttons stay compact in rows. */
+:is(.collection-toolbar, .listhead, .playbooks-toolbar, .playbooks-library-controls) :is(.btn, .tab) {
+  height: var(--control-h);
+}
 .btn.danger {
   border-color: var(--danger);
   color: var(--danger);
@@ -6901,6 +6905,10 @@ dialog.modal::backdrop {
   padding: 8px;
   font: inherit;
 }
+.playbooks-library input[type="search"] {
+  height: var(--control-h);
+  padding-block: 0;
+}
 .playbooks-library-controls {
   display: flex;
   flex-wrap: wrap;
@@ -8470,8 +8478,8 @@ dialog.modal::backdrop {
   cursor: pointer;
 }
 .task-grid-settings-toggle {
-  width: 30px;
-  height: 28px;
+  width: var(--control-h);
+  height: var(--control-h);
   display: grid;
   place-items: center;
   padding: 4px;
@@ -8538,7 +8546,8 @@ dialog.modal::backdrop {
   text-transform: uppercase;
 }
 .task-grid-settings-actions button {
-  padding: 6px 12px;
+  height: var(--control-h);
+  padding: 0 12px;
   border: 1px solid var(--accent-subtle);
   background: transparent;
   color: var(--accent);
