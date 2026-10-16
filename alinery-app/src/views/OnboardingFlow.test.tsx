@@ -174,8 +174,9 @@ describe("OnboardingFlow wizard", () => {
         onLaunchStarterTask={vi.fn(async () => {})}
       />,
     );
-    await waitFor(() => expect(screen.getByLabelText("Default repository model")).toHaveProperty("value", effective.defaults.model));
-    fireEvent.click(screen.getByRole("button", { name: "Browse models" }));
+    const field = screen.getByRole("combobox", { name: "Default repository model" });
+    await waitFor(() => expect(field.textContent).toContain(effective.defaults.model));
+    fireEvent.click(field);
     act(() => pick?.(model));
     await waitFor(() => expect(persisted.defaults.model).toBe(model || null));
     expect(persisted.github).toEqual(original.github);
