@@ -175,7 +175,7 @@ describe("OnboardingFlow wizard", () => {
       />,
     );
     const field = screen.getByRole("combobox", { name: "Default repository model" });
-    await waitFor(() => expect(field.textContent).toContain(effective.defaults.model));
+    await waitFor(() => expect(field).toHaveProperty("value", effective.defaults.model));
     fireEvent.click(field);
     act(() => pick?.(model));
     await waitFor(() => expect(persisted.defaults.model).toBe(model || null));
